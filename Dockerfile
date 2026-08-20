@@ -23,15 +23,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 
+RUN groupadd --system --gid 1000 app \
+    && useradd --system --uid 1000 --gid app --home-dir /app --shell /usr/sbin/nologin app
+
 WORKDIR /app
 
-RUN groupadd --system app \
-    && useradd --system --gid app --home-dir /app --no-create-home app
+COPY --from=builder --chown=app:app /opt/venv /opt/venv
+COPY --chown=app:app app ./app
 
-COPY --from=builder /opt/venv /opt/venv
-COPY app ./app
-
-USER app
+USER 1000:1000
 
 EXPOSE 8000
 
