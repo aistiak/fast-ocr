@@ -1,3 +1,5 @@
+import re
+
 from google.api_core.client_options import ClientOptions
 from google.api_core.exceptions import GoogleAPIError
 from google.cloud import vision
@@ -38,6 +40,27 @@ def _mean_confidence(annotation: vision.TextAnnotation) -> float:
     return round(sum(word_scores) / len(word_scores), 4)
 
 
+_SENTENCE_END = frozenset(".!?")
+
+
+def clean_text(text: str) -> str:
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.split("\n")]
+    lines = [line for line in lines if line]
+    if not lines:
+        return ""
+
+    paragraphs = [lines[0]]
+    for line in lines[1:]:
+        previous = paragraphs[-1]
+        if previous[-1] in _SENTENCE_END:
+            paragraphs.append(line)
+        else:
+            paragraphs[-1] = f"{previous} {line}"
+    return "\n\n".join(paragraphs)
+
+
 def extract_text(image_bytes: bytes) -> tuple[str, float]:
     image = vision.Image(content=image_bytes)
     try:
@@ -52,4 +75,4 @@ def extract_text(image_bytes: bytes) -> tuple[str, float]:
     text = (annotation.text or "").strip()
     if not text:
         return "", 0.0
-    return text, _mean_confidence(annotation)
+    return clean_text(text), _mean_confidence(annotation)
