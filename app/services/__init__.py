@@ -1,1 +1,1 @@
-# GCP clients (Vision, Document AI, etc.) will live here.
+# GCP clients (Vision, Document AI, etc.) live here.

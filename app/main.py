@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.api.routes import api_router
+from app.api.routes import health, ocr
 from app.core.config import settings
 
 app = FastAPI(
@@ -8,4 +8,5 @@ app = FastAPI(
     version="0.1.0",
 )
 
-app.include_router(api_router)
+app.include_router(health.router)
+app.include_router(ocr.router)
