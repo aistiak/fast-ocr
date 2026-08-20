@@ -15,18 +15,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ocr"])
 
-MAX_IMAGE_BYTES = 20 * 1024 * 1024
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
 ALLOWED_CONTENT_TYPES = {
     "image/jpeg",
     "image/jpg",
-    "image/png",
-    "image/gif",
-    "image/webp",
-    "image/bmp",
-    "image/tiff",
-    "image/tif",
 }
-ALLOWED_SUFFIXES = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff"}
+ALLOWED_SUFFIXES = {".jpg", ".jpeg"}
 
 
 class ExtractTextResponse(BaseModel):
@@ -58,16 +52,18 @@ def _response(
 
 
 def _is_allowed_image(upload: UploadFile) -> bool:
-    content_type = (upload.content_type or "").split(";")[0].strip().lower()
-    if content_type in ALLOWED_CONTENT_TYPES:
-        return True
     filename = (upload.filename or "").lower()
-    return any(filename.endswith(suffix) for suffix in ALLOWED_SUFFIXES)
+    if not any(filename.endswith(suffix) for suffix in ALLOWED_SUFFIXES):
+        return False
+    content_type = (upload.content_type or "").split(";")[0].strip().lower()
+    if not content_type or content_type in {"application/octet-stream", "binary/octet-stream"}:
+        return True
+    return content_type in ALLOWED_CONTENT_TYPES
 
 
 @router.post("/extract-text")
 async def extract_text_from_image(
-    image: Annotated[UploadFile, File(description="Image file to OCR")],
+    image: Annotated[UploadFile, File(description="JPEG image, max 10MB")],
 ) -> JSONResponse:
     started = time.perf_counter()
 
