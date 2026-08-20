@@ -8,7 +8,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.services.vision_ocr import OcrError, extract_text
 
@@ -26,10 +26,41 @@ FORMAT_SIGNATURES: dict[str, tuple[bytes, ...]] = {
 
 
 class ExtractTextResponse(BaseModel):
-    success: bool
-    text: str
-    confidence: float
-    processing_time_ms: int = Field(ge=0)
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "success": True,
+                "text": "Extracted text from the image.",
+                "confidence": 0.95,
+                "processing_time_ms": 1234,
+            }
+        }
+    )
+
+    success: bool = Field(description="Whether OCR completed successfully.")
+    text: str = Field(description="Cleaned text from the image. Empty on failure.")
+    confidence: float = Field(
+        ge=0,
+        le=1,
+        description="Mean Vision confidence for the detected text (0–1).",
+    )
+    processing_time_ms: int = Field(
+        ge=0,
+        description="Wall-clock time for this request, including the Vision call.",
+    )
+
+
+EXTRACT_TEXT_RESPONSES = {
+    200: {"model": ExtractTextResponse, "description": "Text extracted."},
+    400: {"model": ExtractTextResponse, "description": "Empty upload."},
+    413: {"model": ExtractTextResponse, "description": "File larger than 10MB."},
+    415: {
+        "model": ExtractTextResponse,
+        "description": "Not a JPEG, PNG, or GIF, or extension does not match the file signature.",
+    },
+    422: {"description": "Missing `image` form field."},
+    502: {"model": ExtractTextResponse, "description": "Vision API error."},
+}
 
 
 def _elapsed_ms(started: float) -> int:
@@ -64,9 +95,22 @@ def _matches_signature(suffix: str, image_bytes: bytes) -> bool:
     return any(image_bytes.startswith(signature) for signature in FORMAT_SIGNATURES[suffix])
 
 
-@router.post("/extract-text")
+@router.post(
+    "/extract-text",
+    response_model=ExtractTextResponse,
+    responses=EXTRACT_TEXT_RESPONSES,
+    summary="Extract text from an image",
+    description=(
+        "Upload a JPEG, PNG, or GIF (`multipart/form-data` field `image`, max 10MB). "
+        "The filename extension must match the file signature. "
+        "Uses Google Cloud Vision document text detection."
+    ),
+)
 async def extract_text_from_image(
-    image: Annotated[UploadFile, File(description="JPEG, PNG, or GIF image, max 10MB")],
+    image: Annotated[
+        UploadFile,
+        File(description="JPEG, PNG, or GIF file. Field name: `image`. Max 10MB."),
+    ],
 ) -> JSONResponse:
     started = time.perf_counter()
 
