@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, File, UploadFile
@@ -16,11 +17,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["ocr"])
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
-ALLOWED_CONTENT_TYPES = {
-    "image/jpeg",
-    "image/jpg",
+FORMAT_SIGNATURES: dict[str, tuple[bytes, ...]] = {
+    ".jpg": (b"\xff\xd8\xff",),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".gif": (b"GIF87a", b"GIF89a"),
 }
-ALLOWED_SUFFIXES = {".jpg", ".jpeg"}
 
 
 class ExtractTextResponse(BaseModel):
@@ -51,32 +53,25 @@ def _response(
     return JSONResponse(status_code=status_code, content=body.model_dump())
 
 
-def _is_allowed_image(upload: UploadFile) -> bool:
-    filename = (upload.filename or "").lower()
-    if not any(filename.endswith(suffix) for suffix in ALLOWED_SUFFIXES):
-        return False
-    content_type = (upload.content_type or "").split(";")[0].strip().lower()
-    if not content_type or content_type in {"application/octet-stream", "binary/octet-stream"}:
-        return True
-    return content_type in ALLOWED_CONTENT_TYPES
+def _image_suffix(filename: str | None) -> str | None:
+    suffix = Path(filename or "").suffix.lower()
+    if suffix in FORMAT_SIGNATURES:
+        return suffix
+    return None
+
+
+def _matches_signature(suffix: str, image_bytes: bytes) -> bool:
+    return any(image_bytes.startswith(signature) for signature in FORMAT_SIGNATURES[suffix])
 
 
 @router.post("/extract-text")
 async def extract_text_from_image(
-    image: Annotated[UploadFile, File(description="JPEG image, max 10MB")],
+    image: Annotated[UploadFile, File(description="JPEG, PNG, or GIF image, max 10MB")],
 ) -> JSONResponse:
     started = time.perf_counter()
 
-    if not image.filename:
-        return _response(
-            success=False,
-            text="",
-            confidence=0.0,
-            started=started,
-            status_code=400,
-        )
-
-    if not _is_allowed_image(image):
+    suffix = _image_suffix(image.filename)
+    if suffix is None:
         return _response(
             success=False,
             text="",
@@ -101,6 +96,14 @@ async def extract_text_from_image(
             confidence=0.0,
             started=started,
             status_code=413,
+        )
+    if not _matches_signature(suffix, image_bytes):
+        return _response(
+            success=False,
+            text="",
+            confidence=0.0,
+            started=started,
+            status_code=415,
         )
 
     try:
