@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     app_name: str = "fast-ocr"
     app_env: str = "development"
     host: str = "0.0.0.0"
-    port: int = 8000
+    port: int = 8080
 
     google_cloud_project: str | None = None
     google_application_credentials: str | None = None
