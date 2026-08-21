@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     google_cloud_project: str | None = None
     google_application_credentials: str | None = None
     firestore_collection: str = "ocr_results"
+    firestore_jobs_collection: str = "jobs"
+    firestore_idempotency_collection: str = "idempotency_keys"
 
 
 settings = Settings()

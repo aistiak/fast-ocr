@@ -26,6 +26,18 @@ OCR API backed by Google Cloud Vision.
 ```bash
 curl -X POST -F "image=@sample-images/image1.JPG" http://localhost:8080/extract-text
 ```
+
+**Batch (max 5 files, 10MB each)**
+
+```bash
+curl -X POST \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -F "images=@sample-images/image1.JPG" \
+  -F "images=@sample-images/image2.JPG" \
+  http://localhost:8080/extract-text/batch
+
+curl http://localhost:8080/jobs/{job_id}
+```
 """,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -33,7 +45,7 @@ curl -X POST -F "image=@sample-images/image1.JPG" http://localhost:8080/extract-
     openapi_tags=[
         {
             "name": "ocr",
-            "description": "Extract text from an uploaded image.",
+            "description": "Extract text from an uploaded image, including async batches.",
         },
         {
             "name": "health",
