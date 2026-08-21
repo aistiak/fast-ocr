@@ -1,8 +1,11 @@
 import logging
+from functools import lru_cache
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
+from fastapi.responses import HTMLResponse, JSONResponse
 from slowapi.errors import RateLimitExceeded
 from starlette.responses import Response
 
@@ -18,11 +21,21 @@ setup_logging()
 logger = logging.getLogger("app.http")
 
 _SKIP_REQUEST_LOG = frozenset({"/", "/ping", "/docs", "/redoc", "/openapi.json"})
+_OPENAPI_TAGS = [
+    {
+        "name": "ocr",
+        "description": "Extract text from an uploaded image, including async batches.",
+    },
+    {
+        "name": "health",
+        "description": "Liveness checks.",
+    },
+]
 
-app = FastAPI(
-    title=settings.app_name,
-    version="0.1.0",
-    description="""
+
+def _api_description(base_url: str) -> str:
+    base = base_url.rstrip("/")
+    return f"""
 OCR API backed by Google Cloud Vision.
 
 **Try it out:** open an endpoint, click **Try it out**, upload a JPEG/PNG/GIF (max 10MB), then **Execute**.
@@ -30,40 +43,80 @@ OCR API backed by Google Cloud Vision.
 **cURL**
 
 ```bash
-curl -X POST -F "image=@sample-images/image1.JPG" http://localhost:8080/extract-text
+curl -X POST -F "image=@sample-images/image1.JPG" {base}/extract-text
 ```
 
 **Batch (max 5 files, 10MB each)**
 
 ```bash
-curl -X POST \
-  -H "Idempotency-Key: $(uuidgen)" \
-  -F "images=@sample-images/image1.JPG" \
-  -F "images=@sample-images/image2.JPG" \
-  http://localhost:8080/extract-text/batch
+curl -X POST \\
+  -H "Idempotency-Key: $(uuidgen)" \\
+  -F "images=@sample-images/image1.JPG" \\
+  -F "images=@sample-images/image2.JPG" \\
+  {base}/extract-text/batch
 
-curl http://localhost:8080/jobs/{job_id}
+curl {base}/jobs/{{job_id}}
 ```
-""",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
-    openapi_tags=[
-        {
-            "name": "ocr",
-            "description": "Extract text from an uploaded image, including async batches.",
-        },
-        {
-            "name": "health",
-            "description": "Liveness checks.",
-        },
-    ],
+"""
+
+
+def _public_base_url(request: Request) -> str:
+    proto = request.headers.get("x-forwarded-proto")
+    scheme = proto.split(",")[0].strip() if proto else request.url.scheme
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    if not host:
+        return str(request.base_url).rstrip("/")
+    return f"{scheme}://{host}"
+
+
+app = FastAPI(
+    title=settings.app_name,
+    version="0.1.0",
+    description=_api_description("http://localhost:8080"),
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+    openapi_tags=_OPENAPI_TAGS,
 )
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 app.include_router(api_router)
+
+
+@lru_cache(maxsize=8)
+def _openapi_schema(base_url: str) -> dict:
+    return get_openapi(
+        title=app.title,
+        version=app.version,
+        openapi_version=app.openapi_version,
+        description=_api_description(base_url),
+        routes=app.routes,
+        tags=app.openapi_tags,
+        servers=[{"url": base_url}],
+    )
+
+
+@app.get("/openapi.json", include_in_schema=False)
+async def openapi_json(request: Request) -> JSONResponse:
+    return JSONResponse(_openapi_schema(_public_base_url(request)))
+
+
+@app.get("/docs", include_in_schema=False)
+async def swagger_ui() -> HTMLResponse:
+    return get_swagger_ui_html(
+        openapi_url="/openapi.json",
+        title=f"{settings.app_name} - Docs",
+    )
+
+
+@app.get("/redoc", include_in_schema=False)
+async def redoc_ui() -> HTMLResponse:
+    return get_redoc_html(
+        openapi_url="/openapi.json",
+        title=f"{settings.app_name} - ReDoc",
+    )
 
 
 def _is_single_extract(request: Request) -> bool:
