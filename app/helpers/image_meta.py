@@ -1,18 +1,10 @@
 import zlib
 from typing import Any
 
+from app.helpers.image import format_of
+
 _MAX_TEXT_BYTES = 8192
 _SKIP_PNG_TEXT_KEYS = frozenset({"XML:com.adobe.xmp"})
-
-
-def _format_of(image_bytes: bytes) -> str | None:
-    if image_bytes.startswith(b"\xff\xd8\xff"):
-        return "jpeg"
-    if image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "png"
-    if image_bytes.startswith(b"GIF87a") or image_bytes.startswith(b"GIF89a"):
-        return "gif"
-    return None
 
 
 def _png_size(image_bytes: bytes) -> tuple[int, int] | None:
@@ -178,7 +170,7 @@ def _jpeg_comment(image_bytes: bytes) -> str | None:
 
 def extract_image_metadata(image_bytes: bytes) -> dict[str, Any]:
     metadata: dict[str, Any] = {}
-    image_format = _format_of(image_bytes)
+    image_format = format_of(image_bytes)
     if not image_format:
         return metadata
 

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from slowapi.errors import RateLimitExceeded
 
-from app.api.routes import health, ocr
+from app.api.routes import api_router
 from app.core.config import settings
 from app.core.rate_limit import limiter, rate_limit_exceeded_handler
 
@@ -37,5 +37,4 @@ curl -X POST -F "image=@sample-images/image1.JPG" http://localhost:8080/extract-
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
-app.include_router(health.router)
-app.include_router(ocr.router)
+app.include_router(api_router)

@@ -3,6 +3,8 @@ from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 
+from app.api.schemas.ocr import extract_text_payload
+
 
 def client_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for")
@@ -22,12 +24,6 @@ async def rate_limit_exceeded_handler(
 ) -> JSONResponse:
     return JSONResponse(
         status_code=429,
-        content={
-            "success": False,
-            "text": "",
-            "confidence": 0.0,
-            "processing_time_ms": 0,
-            "metadata": {},
-        },
+        content=extract_text_payload(success=False),
         headers={"Retry-After": "60"},
     )
