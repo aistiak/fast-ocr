@@ -2,6 +2,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.api.schemas.errors import ErrorResponse
+
 
 class BatchItemResult(BaseModel):
     filename: str = Field(description="Original upload filename.")
@@ -72,13 +74,18 @@ class JobStatusResponse(BaseModel):
 
 JOB_ACCEPTED_RESPONSES = {
     202: {"model": JobAcceptedResponse, "description": "Job created and running."},
-    400: {"description": "No files, more than 5 files, or missing/invalid Idempotency-Key."},
-    413: {"description": "One or more files are larger than 10MB."},
-    429: {"description": "More than 4 batch requests per minute."},
-    503: {"description": "Could not create the job."},
+    400: {"model": ErrorResponse, "description": "No files, more than 5 files, missing/invalid Idempotency-Key, or empty uploads."},
+    413: {"model": ErrorResponse, "description": "One or more files are larger than 10MB."},
+    415: {"model": ErrorResponse, "description": "One or more files are not JPEG, PNG, or GIF."},
+    429: {"model": ErrorResponse, "description": "More than 4 batch requests per minute."},
+    422: {"model": ErrorResponse, "description": "Missing `images` form field or Idempotency-Key."},
+    500: {"model": ErrorResponse, "description": "Unexpected server error."},
+    503: {"model": ErrorResponse, "description": "Could not create the job."},
 }
 
 JOB_STATUS_RESPONSES = {
     200: {"model": JobStatusResponse, "description": "Current job status."},
-    404: {"description": "Unknown job_id."},
+    404: {"model": ErrorResponse, "description": "Unknown job_id."},
+    500: {"model": ErrorResponse, "description": "Unexpected server error."},
+    503: {"model": ErrorResponse, "description": "Could not load the job."},
 }

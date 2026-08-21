@@ -5,8 +5,9 @@ import logging
 from fastapi import BackgroundTasks, UploadFile
 from fastapi.responses import JSONResponse
 
+from app.api.schemas.errors import error_payload
 from app.api.schemas.job import JobAcceptedResponse, JobStatusResponse
-from app.helpers.image import MAX_IMAGE_BYTES
+from app.helpers.image import MAX_IMAGE_BYTES, is_supported_image
 from app.services.job_service import MAX_BATCH_FILES, job_service
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,53 @@ def _normalize_idempotency_key(value: str | None) -> str | None:
     return key
 
 
+def _file_issue(filename: str, image_bytes: bytes) -> dict[str, str] | None:
+    if not image_bytes:
+        return {
+            "filename": filename,
+            "error": "empty_upload",
+            "message": "Empty upload.",
+        }
+    if len(image_bytes) > MAX_IMAGE_BYTES:
+        return {
+            "filename": filename,
+            "error": "payload_too_large",
+            "message": "Each image must be 10MB or smaller.",
+        }
+    if not is_supported_image(image_bytes):
+        return {
+            "filename": filename,
+            "error": "unsupported_media_type",
+            "message": "Not a JPEG, PNG, or GIF.",
+        }
+    return None
+
+
+def _rejected_files_response(issues: list[dict[str, str]]) -> JSONResponse:
+    codes = {item["error"] for item in issues}
+    if codes == {"payload_too_large"}:
+        status_code = 413
+        error = "payload_too_large"
+        message = "Each image must be 10MB or smaller."
+    elif codes == {"unsupported_media_type"}:
+        status_code = 415
+        error = "unsupported_media_type"
+        message = "Not a JPEG, PNG, or GIF."
+    elif codes == {"empty_upload"}:
+        status_code = 400
+        error = "empty_upload"
+        message = "Empty upload."
+    else:
+        status_code = 400
+        error = "invalid_files"
+        message = "One or more files were rejected."
+    logger.warning("controller rejected batch files=%s", issues)
+    return JSONResponse(
+        status_code=status_code,
+        content=error_payload(error, message, files=issues),
+    )
+
+
 async def create_batch_job(
     images: list[UploadFile],
     background_tasks: BackgroundTasks,
@@ -34,37 +82,40 @@ async def create_batch_job(
     if key is None:
         return JSONResponse(
             status_code=400,
-            content={"error": "Header Idempotency-Key is required (1–256 characters)."},
+            content=error_payload(
+                "missing_idempotency_key",
+                "Header Idempotency-Key is required (1–256 characters).",
+            ),
         )
     if not images:
         return JSONResponse(
             status_code=400,
-            content={"error": "Upload between 1 and 5 files in the images field."},
+            content=error_payload(
+                "invalid_batch",
+                "Upload between 1 and 5 files in the images field.",
+            ),
         )
     if len(images) > MAX_BATCH_FILES:
         return JSONResponse(
             status_code=400,
-            content={"error": f"Maximum {MAX_BATCH_FILES} files per batch."},
+            content=error_payload(
+                "too_many_files",
+                f"Maximum {MAX_BATCH_FILES} files per batch.",
+            ),
         )
 
     files: list[tuple[str, bytes]] = []
-    oversized: list[str] = []
+    issues: list[dict[str, str]] = []
     for image in images:
         filename = image.filename or "unknown"
         image_bytes = await image.read()
         files.append((filename, image_bytes))
-        if len(image_bytes) > MAX_IMAGE_BYTES:
-            oversized.append(filename)
+        issue = _file_issue(filename, image_bytes)
+        if issue is not None:
+            issues.append(issue)
 
-    if oversized:
-        logger.warning("controller rejected oversized batch files=%s", oversized)
-        return JSONResponse(
-            status_code=413,
-            content={
-                "error": "Each image must be 10MB or smaller.",
-                "files": oversized,
-            },
-        )
+    if issues:
+        return _rejected_files_response(issues)
 
     try:
         begun = await job_service.begin_job(key)
@@ -72,7 +123,7 @@ async def create_batch_job(
         logger.exception("controller could not create job")
         return JSONResponse(
             status_code=503,
-            content={"error": "Could not create job."},
+            content=error_payload("job_create_failed", "Could not create job."),
         )
 
     job_id = begun["job_id"]
@@ -89,9 +140,19 @@ async def create_batch_job(
 
 
 async def get_job_status(job_id: str) -> JSONResponse:
-    job = await job_service.get_job(job_id)
+    try:
+        job = await job_service.get_job(job_id)
+    except Exception:
+        logger.exception("controller could not load job_id=%s", job_id)
+        return JSONResponse(
+            status_code=503,
+            content=error_payload("job_lookup_failed", "Could not load job."),
+        )
     if job is None:
-        return JSONResponse(status_code=404, content={"error": "Job not found."})
+        return JSONResponse(
+            status_code=404,
+            content=error_payload("job_not_found", "Job not found."),
+        )
 
     error = job.get("error")
     if error is not None and not isinstance(error, str):

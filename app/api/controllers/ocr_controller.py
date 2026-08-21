@@ -27,6 +27,8 @@ def _response(
     started: float,
     status_code: int = 200,
     metadata: dict[str, Any] | None = None,
+    error: str | None = None,
+    message: str | None = None,
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
@@ -36,6 +38,8 @@ def _response(
             confidence=confidence,
             processing_time_ms=_elapsed_ms(started),
             metadata=metadata,
+            error=error,
+            message=message,
         ),
     )
 
@@ -55,6 +59,8 @@ async def extract_text(image: UploadFile) -> JSONResponse:
             confidence=0.0,
             started=started,
             status_code=400,
+            error="empty_upload",
+            message="Empty upload.",
         )
     if len(image_bytes) > MAX_IMAGE_BYTES:
         logger.warning(
@@ -68,6 +74,8 @@ async def extract_text(image: UploadFile) -> JSONResponse:
             confidence=0.0,
             started=started,
             status_code=413,
+            error="payload_too_large",
+            message="File larger than 10MB.",
         )
     if not is_supported_image(image_bytes):
         logger.warning("controller rejected unsupported type filename=%s", filename)
@@ -77,6 +85,8 @@ async def extract_text(image: UploadFile) -> JSONResponse:
             confidence=0.0,
             started=started,
             status_code=415,
+            error="unsupported_media_type",
+            message="Not a JPEG, PNG, or GIF.",
         )
 
     logger.info("controller calling OcrService")
@@ -91,6 +101,8 @@ async def extract_text(image: UploadFile) -> JSONResponse:
             started=started,
             status_code=502,
             metadata=exc.metadata,
+            error="vision_error",
+            message=str(exc) or "Vision OCR failed.",
         )
 
     elapsed = _elapsed_ms(started)

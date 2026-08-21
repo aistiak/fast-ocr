@@ -78,7 +78,7 @@ class JobService:
                 success_count,
                 failure_count,
             )
-        except Exception as exc:
+        except Exception:
             logger.exception("JobService aborted job_id=%s", job_id)
             try:
                 await self._repository.complete(
@@ -87,7 +87,7 @@ class JobService:
                     success_count=success_count,
                     failure_count=failure_count + (len(files) - len(results)),
                     result=results,
-                    error=str(exc) or "Batch processing failed",
+                    error="Batch processing failed",
                 )
             except Exception:
                 logger.exception("JobService could not persist failure job_id=%s", job_id)

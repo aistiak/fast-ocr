@@ -2,6 +2,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.api.schemas.errors import ErrorResponse
+
 
 class ExtractTextResponse(BaseModel):
     model_config = ConfigDict(
@@ -19,6 +21,8 @@ class ExtractTextResponse(BaseModel):
                     "Author": "Sample User",
                     "Comment": "Synthetic metadata added for local testing",
                 },
+                "error": None,
+                "message": None,
             }
         }
     )
@@ -38,6 +42,14 @@ class ExtractTextResponse(BaseModel):
         default_factory=dict,
         description="Image material when available (format, width, height, and PNG/JPEG text tags). Empty object otherwise.",
     )
+    error: str | None = Field(
+        default=None,
+        description="Machine-readable code on failure. Null on success.",
+    )
+    message: str | None = Field(
+        default=None,
+        description="Human-readable explanation on failure. Null on success.",
+    )
 
 
 EXTRACT_TEXT_RESPONSES = {
@@ -48,8 +60,9 @@ EXTRACT_TEXT_RESPONSES = {
         "model": ExtractTextResponse,
         "description": "Not a JPEG, PNG, or GIF (file signature).",
     },
-    422: {"description": "Missing `image` form field."},
-    429: {"model": ExtractTextResponse, "description": "More than 20 requests per minute "},
+    422: {"model": ErrorResponse, "description": "Missing `image` form field."},
+    429: {"model": ExtractTextResponse, "description": "More than 20 requests per minute."},
+    500: {"model": ExtractTextResponse, "description": "Unexpected server error."},
     502: {"model": ExtractTextResponse, "description": "Vision API error."},
 }
 
@@ -61,6 +74,8 @@ def extract_text_payload(
     confidence: float = 0.0,
     processing_time_ms: int = 0,
     metadata: dict[str, Any] | None = None,
+    error: str | None = None,
+    message: str | None = None,
 ) -> dict[str, Any]:
     return ExtractTextResponse(
         success=success,
@@ -68,4 +83,6 @@ def extract_text_payload(
         confidence=confidence,
         processing_time_ms=processing_time_ms,
         metadata=metadata or {},
+        error=error,
+        message=message,
     ).model_dump()
