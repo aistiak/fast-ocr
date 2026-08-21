@@ -5,10 +5,11 @@ import logging
 import time
 from typing import Annotated
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.rate_limit import limiter
 from app.services.vision_ocr import OcrError, extract_text
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,7 @@ EXTRACT_TEXT_RESPONSES = {
         "description": "Not a JPEG, PNG, or GIF (file signature).",
     },
     422: {"description": "Missing `image` form field."},
+    429: {"model": ExtractTextResponse, "description": "More than 20 requests per minute "},
     502: {"model": ExtractTextResponse, "description": "Vision API error."},
 }
 
@@ -95,10 +97,13 @@ def _is_supported_image(image_bytes: bytes) -> bool:
     description=(
         "Upload a JPEG, PNG, or GIF (`multipart/form-data` field `image`, max 10MB). "
         "The file is identified by its signature, not the filename extension. "
-        "Uses Google Cloud Vision document text detection."
+        "Uses Google Cloud Vision document text detection. "
+        "Limited to 20 requests per minute per client IP."
     ),
 )
+@limiter.limit("20/minute")
 async def extract_text_from_image(
+    request: Request,
     image: Annotated[
         UploadFile,
         File(description="JPEG, PNG, or GIF file. Field name: `image`. Max 10MB."),

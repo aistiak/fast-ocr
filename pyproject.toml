@@ -9,6 +9,7 @@ dependencies = [
     "pydantic-settings>=2.6.0",
     "python-multipart>=0.0.12",
     "google-cloud-vision>=3.8.0",
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]
