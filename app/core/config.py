@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     host: str = "0.0.0.0"
     port: int = 8080
+    log_level: str = "INFO"
 
     google_cloud_project: str | None = None
     google_application_credentials: str | None = None

@@ -1,9 +1,13 @@
+import logging
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 
 from app.api.schemas.ocr import extract_text_payload
+
+logger = logging.getLogger(__name__)
 
 
 def client_ip(request: Request) -> str:
@@ -22,6 +26,7 @@ async def rate_limit_exceeded_handler(
     request: Request,
     exc: RateLimitExceeded,
 ) -> JSONResponse:
+    logger.warning("rate limit exceeded ip=%s", client_ip(request))
     return JSONResponse(
         status_code=429,
         content=extract_text_payload(success=False),

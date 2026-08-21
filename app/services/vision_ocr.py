@@ -1,3 +1,5 @@
+import logging
+
 from google.api_core.client_options import ClientOptions
 from google.api_core.exceptions import GoogleAPIError
 from google.cloud import vision
@@ -5,6 +7,8 @@ from google.cloud import vision
 from app.core.config import settings
 from app.domain.errors import OcrError
 from app.helpers.text import clean_text
+
+logger = logging.getLogger(__name__)
 
 _client: vision.ImageAnnotatorClient | None = None
 
@@ -36,6 +40,7 @@ def _mean_confidence(annotation: vision.TextAnnotation) -> float:
 
 
 def extract_text(image_bytes: bytes) -> tuple[str, float]:
+    logger.info("VisionService document_text_detection")
     image = vision.Image(content=image_bytes)
     try:
         response = _client_for_project().document_text_detection(image=image)

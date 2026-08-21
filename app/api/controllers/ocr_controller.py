@@ -42,9 +42,13 @@ def _response(
 
 async def extract_text(image: UploadFile) -> JSONResponse:
     started = time.perf_counter()
+    filename = image.filename or "unknown"
 
     image_bytes = await image.read()
+    logger.info("controller received filename=%s size=%s", filename, len(image_bytes))
+
     if not image_bytes:
+        logger.warning("controller rejected empty upload filename=%s", filename)
         return _response(
             success=False,
             text="",
@@ -53,6 +57,11 @@ async def extract_text(image: UploadFile) -> JSONResponse:
             status_code=400,
         )
     if len(image_bytes) > MAX_IMAGE_BYTES:
+        logger.warning(
+            "controller rejected oversized upload filename=%s size=%s",
+            filename,
+            len(image_bytes),
+        )
         return _response(
             success=False,
             text="",
@@ -61,6 +70,7 @@ async def extract_text(image: UploadFile) -> JSONResponse:
             status_code=413,
         )
     if not is_supported_image(image_bytes):
+        logger.warning("controller rejected unsupported type filename=%s", filename)
         return _response(
             success=False,
             text="",
@@ -69,10 +79,11 @@ async def extract_text(image: UploadFile) -> JSONResponse:
             status_code=415,
         )
 
+    logger.info("controller calling OcrService")
     try:
         text, confidence, metadata = await ocr_service.extract_text(image_bytes)
     except OcrError as exc:
-        logger.exception("Vision OCR failed")
+        logger.exception("controller Vision OCR failed filename=%s", filename)
         return _response(
             success=False,
             text="",
@@ -82,6 +93,13 @@ async def extract_text(image: UploadFile) -> JSONResponse:
             metadata=exc.metadata,
         )
 
+    elapsed = _elapsed_ms(started)
+    logger.info(
+        "controller done chars=%s confidence=%s ms=%s",
+        len(text),
+        confidence,
+        elapsed,
+    )
     return _response(
         success=True,
         text=text,

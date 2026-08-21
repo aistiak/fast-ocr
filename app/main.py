@@ -1,9 +1,17 @@
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, Request
 from slowapi.errors import RateLimitExceeded
+from starlette.responses import Response
 
 from app.api.routes import api_router
 from app.core.config import settings
+from app.core.logging import setup_logging
 from app.core.rate_limit import limiter, rate_limit_exceeded_handler
+
+setup_logging()
+
+_SKIP_REQUEST_LOG = frozenset({"/", "/ping", "/docs", "/redoc", "/openapi.json"})
 
 app = FastAPI(
     title=settings.app_name,
@@ -38,3 +46,14 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 app.include_router(api_router)
+
+
+@app.middleware("http")
+async def log_incoming_request(request: Request, call_next) -> Response:
+    if request.url.path not in _SKIP_REQUEST_LOG:
+        logging.getLogger("app.http").info(
+            "incoming %s %s",
+            request.method,
+            request.url.path,
+        )
+    return await call_next(request)
