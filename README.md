@@ -32,7 +32,7 @@ gcloud auth application-default login
 - rate limiting 20 request per min , for batch job 4 request per min
 - caching for identical image
 - batch processing with max 5 files .
-- added logging and error handling .
+- added logging and error handling . failures include `error` + `message` .
 - added global exception handling .
 - Text extraction with Google Cloud Vision API.
 - Deployed to GCP .
@@ -94,6 +94,38 @@ curl -X POST \
 
 curl https://fast-ocr-ithnktbq2q-uc.a.run.app/jobs/{job_id}
 ```
+
+## Errors
+
+Failed requests return `error` (code) and `message` (human-readable). On `/extract-text` they sit on the usual payload (`success: false`, empty `text`). Batch and other routes return `{ "error", "message" }` only. Success responses set both to `null`.
+
+```json
+{
+  "success": false,
+  "text": "",
+  "confidence": 0.0,
+  "processing_time_ms": 0,
+  "metadata": {},
+  "error": "unsupported_media_type",
+  "message": "Not a JPEG, PNG, or GIF."
+}
+```
+
+| Status | error | message |
+| --- | --- | --- |
+| 400 | `empty_upload` | Empty upload. |
+| 400 | `missing_idempotency_key` | Header Idempotency-Key is required (1–256 characters). |
+| 400 | `invalid_batch` / `too_many_files` | Wrong number of files (batch). |
+| 413 | `payload_too_large` | File larger than 10MB. |
+| 415 | `unsupported_media_type` | Not a JPEG, PNG, or GIF. |
+| 422 | `validation_error` | Missing form field, e.g. `image: Field required`. |
+| 429 | `rate_limited` | Too many requests. Try again in 60 seconds. |
+| 404 | `job_not_found` | Job not found. |
+| 500 | `internal_error` | An unexpected error occurred. |
+| 502 | `vision_error` | Vision API message, or `Vision OCR failed.` |
+| 503 | `job_create_failed` / `job_lookup_failed` | Could not create or load a job. |
+
+Batch file rejections may also include a `files` list with per-file `error` and `message`.
 
 ## Caching
 
