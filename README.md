@@ -43,7 +43,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 ```
 
 Swagger: [http://localhost:8080/docs](http://localhost:8080/docs)
-ReDoc: http://localhost:8080/redoc
+
+ReDoc: [http://localhost:8080/redoc](http://localhost:8080/redoc)
 
 ```bash
 curl -X POST -F "image=@sample-images/image1.JPG" http://localhost:8080/extract-text
@@ -64,7 +65,9 @@ curl http://localhost:8080/jobs/{job_id}
 ## Live 
 
 Live: [https://fast-ocr-ithnktbq2q-uc.a.run.app](https://fast-ocr-ithnktbq2q-uc.a.run.app)
+
 Docs: [https://fast-ocr-ithnktbq2q-uc.a.run.app/docs](https://fast-ocr-ithnktbq2q-uc.a.run.app/docs)
+
 Redoc: [https://fast-ocr-ithnktbq2q-uc.a.run.app/redoc](https://fast-ocr-ithnktbq2q-uc.a.run.app/redoc)
 
 ```bash
