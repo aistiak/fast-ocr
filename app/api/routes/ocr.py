@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, File, UploadFile
@@ -17,12 +16,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["ocr"])
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
-FORMAT_SIGNATURES: dict[str, tuple[bytes, ...]] = {
-    ".jpg": (b"\xff\xd8\xff",),
-    ".jpeg": (b"\xff\xd8\xff",),
-    ".png": (b"\x89PNG\r\n\x1a\n",),
-    ".gif": (b"GIF87a", b"GIF89a"),
-}
+IMAGE_SIGNATURES = (
+    b"\xff\xd8\xff",         # JPEG
+    b"\x89PNG\r\n\x1a\n",   # PNG
+    b"GIF87a",              # GIF 87a
+    b"GIF89a",              # GIF 89a
+)
 
 
 class ExtractTextResponse(BaseModel):
@@ -56,7 +55,7 @@ EXTRACT_TEXT_RESPONSES = {
     413: {"model": ExtractTextResponse, "description": "File larger than 10MB."},
     415: {
         "model": ExtractTextResponse,
-        "description": "Not a JPEG, PNG, or GIF, or extension does not match the file signature.",
+        "description": "Not a JPEG, PNG, or GIF (file signature).",
     },
     422: {"description": "Missing `image` form field."},
     502: {"model": ExtractTextResponse, "description": "Vision API error."},
@@ -84,15 +83,8 @@ def _response(
     return JSONResponse(status_code=status_code, content=body.model_dump())
 
 
-def _image_suffix(filename: str | None) -> str | None:
-    suffix = Path(filename or "").suffix.lower()
-    if suffix in FORMAT_SIGNATURES:
-        return suffix
-    return None
-
-
-def _matches_signature(suffix: str, image_bytes: bytes) -> bool:
-    return any(image_bytes.startswith(signature) for signature in FORMAT_SIGNATURES[suffix])
+def _is_supported_image(image_bytes: bytes) -> bool:
+    return any(image_bytes.startswith(signature) for signature in IMAGE_SIGNATURES)
 
 
 @router.post(
@@ -102,7 +94,7 @@ def _matches_signature(suffix: str, image_bytes: bytes) -> bool:
     summary="Extract text from an image",
     description=(
         "Upload a JPEG, PNG, or GIF (`multipart/form-data` field `image`, max 10MB). "
-        "The filename extension must match the file signature. "
+        "The file is identified by its signature, not the filename extension. "
         "Uses Google Cloud Vision document text detection."
     ),
 )
@@ -113,16 +105,6 @@ async def extract_text_from_image(
     ],
 ) -> JSONResponse:
     started = time.perf_counter()
-
-    suffix = _image_suffix(image.filename)
-    if suffix is None:
-        return _response(
-            success=False,
-            text="",
-            confidence=0.0,
-            started=started,
-            status_code=415,
-        )
 
     image_bytes = await image.read()
     if not image_bytes:
@@ -141,7 +123,7 @@ async def extract_text_from_image(
             started=started,
             status_code=413,
         )
-    if not _matches_signature(suffix, image_bytes):
+    if not _is_supported_image(image_bytes):
         return _response(
             success=False,
             text="",
