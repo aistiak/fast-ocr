@@ -3,13 +3,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.rate_limit import limiter
+from app.services.image_meta import extract_image_metadata
 from app.services.vision_ocr import OcrError, extract_text
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,14 @@ class ExtractTextResponse(BaseModel):
                 "text": "Extracted text from the image.",
                 "confidence": 0.95,
                 "processing_time_ms": 1234,
+                "metadata": {
+                    "format": "png",
+                    "width": 1514,
+                    "height": 470,
+                    "Title": "Fast OCR sample image two",
+                    "Author": "Sample User",
+                    "Comment": "Synthetic metadata added for local testing",
+                },
             }
         }
     )
@@ -47,6 +56,10 @@ class ExtractTextResponse(BaseModel):
     processing_time_ms: int = Field(
         ge=0,
         description="Wall-clock time for this request, including the Vision call.",
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Image material when available (format, width, height, and PNG/JPEG text tags). Empty object otherwise.",
     )
 
 
@@ -75,12 +88,14 @@ def _response(
     confidence: float,
     started: float,
     status_code: int = 200,
+    metadata: dict[str, Any] | None = None,
 ) -> JSONResponse:
     body = ExtractTextResponse(
         success=success,
         text=text,
         confidence=confidence,
         processing_time_ms=_elapsed_ms(started),
+        metadata=metadata or {},
     )
     return JSONResponse(status_code=status_code, content=body.model_dump())
 
@@ -147,6 +162,7 @@ async def extract_text_from_image(
             confidence=0.0,
             started=started,
             status_code=502,
+            metadata=extract_image_metadata(image_bytes),
         )
 
     return _response(
@@ -154,4 +170,5 @@ async def extract_text_from_image(
         text=text,
         confidence=confidence,
         started=started,
+        metadata=extract_image_metadata(image_bytes),
     )

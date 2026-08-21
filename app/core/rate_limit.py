@@ -27,6 +27,7 @@ async def rate_limit_exceeded_handler(
             "text": "",
             "confidence": 0.0,
             "processing_time_ms": 0,
+            "metadata": {},
         },
         headers={"Retry-After": "60"},
     )
