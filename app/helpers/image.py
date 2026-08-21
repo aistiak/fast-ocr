@@ -1,3 +1,5 @@
+import hashlib
+
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 _JPEG = b"\xff\xd8\xff"
@@ -20,3 +22,7 @@ def format_of(image_bytes: bytes) -> str | None:
 
 def is_supported_image(image_bytes: bytes) -> bool:
     return format_of(image_bytes) is not None
+
+
+def image_hash(image_bytes: bytes) -> str:
+    return hashlib.sha256(image_bytes).hexdigest()

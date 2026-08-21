@@ -2,10 +2,11 @@ from typing import Any, Protocol
 
 
 class OcrResultRepository(Protocol):
-    """Persistence for OCR results. Unused until a database is added."""
+    async def get(self, image_hash: str) -> dict[str, Any] | None: ...
 
     async def save(
         self,
+        image_hash: str,
         *,
         text: str,
         confidence: float,
