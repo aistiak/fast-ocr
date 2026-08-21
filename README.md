@@ -25,7 +25,17 @@ Login so the app can call GCP from this machine:
 gcloud auth application-default login
 ```
 
+## what is done
 
+- text extraction with confidence score, metadata, processing time and some basic processing, 10MB file limit
+- supports png, jpg , jpeg , gif . validation done with file-signature. sample images include in sample-images dir.
+- rate limiting 20 request per min , for batch job 4 request per min
+- caching for identical image
+- batch processing with max 5 files .
+- added logging and error handling .
+- added global exception handling .
+- Text extraction with Google Cloud Vision API.
+- Deployed to GCP .
 
 ## Run
 
